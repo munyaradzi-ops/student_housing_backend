@@ -12,6 +12,25 @@ class User(AbstractUser):
     def __str__(self):
         return f"{self.username} ({self.role})"
 
+
+# marketplace/models.py
+
+class BookingRequest(models.Model):
+    STATUS_CHOICES = (
+        ('pending', 'Pending'),
+        ('accepted', 'Accepted'),
+        ('declined', 'Declined'),
+    )
+    property = models.ForeignKey(Property, on_delete=models.CASCADE, related_name='bookings')
+    student = models.ForeignKey(User, on_delete=models.CASCADE, related_name='my_bookings')
+    room_number = models.CharField(max_length=50)
+    status = models.CharField(max_length=10, choices=STATUS_CHOICES, default='pending')
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-created_at']
+
+
 class Property(models.Model):
     landlord = models.ForeignKey(User, on_delete=models.CASCADE, related_name='properties')
     title = models.CharField(max_length=255)
