@@ -108,6 +108,8 @@ class ChatRoomSerializer(serializers.ModelSerializer):
         return None
 
 
+# marketplace/serializers.py
+
 class BookingRequestSerializer(serializers.ModelSerializer):
     student_username = serializers.CharField(source='student.username', read_only=True)
     property_title = serializers.CharField(source='property.title', read_only=True)
@@ -115,4 +117,9 @@ class BookingRequestSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = BookingRequest
-        fields = ['id', 'property', 'property_title', 'student', 'student_username', 'room_number', 'status', 'landlord_id', 'created_at']
+        fields = [
+            'id', 'property', 'property_title', 'student', 
+            'student_username', 'room_number', 'status', 'landlord_id', 'created_at'
+        ]
+        # 🔍 CRUCIAL FIX: Tells Django to stop expecting the student ID in the raw incoming JSON payload!
+        read_only_fields = ['student', 'status']
