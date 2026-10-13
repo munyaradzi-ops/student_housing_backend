@@ -75,27 +75,33 @@ from rest_framework.response import Response
 from .models import Room, RoomImage, Property
 from .serializers import RoomSerializer
 
+# marketplace/views.py
+
 class RoomViewSet(viewsets.ModelViewSet):
     queryset = Room.objects.all()
     serializer_class = RoomSerializer
     permission_classes = [IsLandlordOrReadOnly]
 
-    # 🔍 CRUCIAL MULTIPART FIX: Intercept the incoming image byte streams!
     def create(self, request, *args, **kwargs):
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         room = serializer.save()
 
-        # Check if an image file was sent in the Multipart request payload keys
-        uploaded_file = request.FILES.get('image')
+        # 🔍 EXTENDED MULTIPART DATA EXTRACTOR:
+        # Tries 'image', 'image[]', and direct FILES lists to capture all uploads safely!
+        uploaded_files = request.FILES.getlist('image') or request.FILES.getlist('image[]')
         
-        if uploaded_file:
-            print(f"\n📸 [DJANGO IMAGE INTERCEPTOR] Found uploaded file asset: {uploaded_file.name}")
-            # Atomically build the child row record in the RoomImage table!
-            room_image = RoomImage.objects.create(room=room, image=uploaded_file)
-            print(f"🚀 [DJANGO IMAGE INTERCEPTOR] Saved to database under row ID: {room_image.id}\n")
-        else:
-            print("\n⚠️ [DJANGO IMAGE INTERCEPTOR] Warning: No file payload found under key name 'image'\n")
+        # If files are streamed with index suffix markers (fallback tracking)
+        if not uploaded_files:
+            uploaded_files = [request.FILES[key] for key in request.FILES if 'image' in key]
+
+        print(f"\n📸 [CLOUD SERVICE] Processing multi-image upload queue...")
+        print(f"📦 Total discovered binary files inside request stream: {len(uploaded_files)}")
+
+        for file_asset in uploaded_files:
+            room_image = RoomImage.objects.create(room=room, image=file_asset)
+            print(f"   ✅ Saved child RoomImage row ID: {room_image.id} | Filename: {file_asset.name}")
+        print("======================================================\n")
 
         headers = self.get_success_headers(serializer.data)
         return Response(serializer.data, status=status.HTTP_201_CREATED, headers=headers)
