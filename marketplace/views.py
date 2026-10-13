@@ -70,6 +70,41 @@ class PropertyViewSet(viewsets.ModelViewSet):
 
 
 # marketplace/views.py
+from .models import BookingRequest
+from .serializers import BookingRequestSerializer
+
+class BookingRequestViewSet(viewsets.ModelViewSet):
+    queryset = BookingRequest.objects.all()
+    serializer_class = BookingRequestSerializer
+    permission_classes = [permissions.IsAuthenticated]
+
+    def perform_create(self, serializer):
+        serializer.save(student=self.request.user)
+
+    def get_queryset(self):
+        user = self.request.user
+        if getattr(user, 'role', None) == 'student':
+            return BookingRequest.objects.filter(student=user)
+        # Landlords can only see bookings targeted at their own properties
+        return BookingRequest.objects.filter(property__landlord=user)
+
+    @action(detail=True, methods=['post'])
+    def accept(self, request, pk=None):
+        booking = self.get_object()
+        booking.status = 'accepted'
+        booking.save()
+        
+        # Dynamic Feature: Auto-create a live ChatRoom when request is accepted!
+        ChatRoom.objects.get_or_create(
+            property=booking.property,
+            student=booking.student,
+            landlord=booking.property.landlord
+        )
+        return Response({'status': 'booking accepted, chat workspace established'})
+
+
+
+# marketplace/views.py
 from rest_framework import viewsets, status
 from rest_framework.response import Response
 from .models import Room, RoomImage, Property
