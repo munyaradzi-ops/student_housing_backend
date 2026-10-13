@@ -2,7 +2,7 @@
 from rest_framework import serializers
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
 from django.contrib.auth import get_user_model
-from .models import Property, Room, RoomImage, ChatRoom, Message
+from .models import Property, Room, RoomImage, ChatRoom, Message, BookingRequest
 
 User = get_user_model()
 
@@ -35,15 +35,6 @@ class RegisterSerializer(serializers.ModelSerializer):
 
 
 # marketplace/serializers.py
-
-class BookingRequestSerializer(serializers.ModelSerializer):
-    student_username = serializers.CharField(source='student.username', read_only=True)
-    property_title = serializers.CharField(source='property.title', read_only=True)
-    landlord_id = serializers.IntegerField(source='property.landlord.id', read_only=True)
-
-    class Meta:
-        model = BookingRequest
-        fields = ['id', 'property', 'property_title', 'student', 'student_username', 'room_number', 'status', 'landlord_id', 'created_at']
 
 
 # ----------------------------------------------------
@@ -115,3 +106,13 @@ class ChatRoomSerializer(serializers.ModelSerializer):
         if msg:
             return MessageSerializer(msg).data
         return None
+
+
+class BookingRequestSerializer(serializers.ModelSerializer):
+    student_username = serializers.CharField(source='student.username', read_only=True)
+    property_title = serializers.CharField(source='property.title', read_only=True)
+    landlord_id = serializers.IntegerField(source='property.landlord.id', read_only=True)
+
+    class Meta:
+        model = BookingRequest
+        fields = ['id', 'property', 'property_title', 'student', 'student_username', 'room_number', 'status', 'landlord_id', 'created_at']
