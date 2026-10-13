@@ -15,6 +15,8 @@ router = DefaultRouter()
 router.register(r'properties', PropertyViewSet, basename='property')
 router.register(r'rooms', RoomViewSet, basename='room')
 router.register(r'chats', ChatRoomViewSet, basename='chat')
+router.register(r'bookings', BookingRequestViewSet)
+
 
 urlpatterns = [
     # API viewset query routers (properties, rooms, chats)
