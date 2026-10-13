@@ -1,100 +1,104 @@
-# marketplace/views.py
-from rest_framework import viewsets, permissions, generics, status
-from rest_framework.response import Response
-from rest_framework.decorators import action
-from rest_framework_simplejwt.views import TokenObtainPairView
-
+# marketplace/serializers.py
+from rest_framework import serializers
+from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
+from django.contrib.auth import get_user_model
 from .models import Property, Room, RoomImage, ChatRoom, Message
-from .serializers import (
-    PropertySerializer, 
-    RoomSerializer, 
-    RegisterSerializer, 
-    CustomTokenObtainPairSerializer,
-    ChatRoomSerializer,
-    MessageSerializer
-)
 
-class CustomTokenObtainPairView(TokenObtainPairView):
-    serializer_class = CustomTokenObtainPairSerializer
+User = get_user_model()
 
-class RegisterView(generics.CreateAPIView):
-    serializer_class = RegisterSerializer
-    permission_classes = [permissions.AllowAny]
+# ----------------------------------------------------
+# 🔐 AUTHENTICATION & SECURITY SERIALIZERS
+# ----------------------------------------------------
 
-class IsLandlordOrReadOnly(permissions.BasePermission):
-    def has_permission(self, request, view):
-        if request.method in permissions.SAFE_METHODS:
-            return True
-        return request.user.is_authenticated and getattr(request.user, 'role', None) == 'landlord'
+class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
+    @classmethod
+    def get_token(cls, user):
+        token = super().get_token(user)
+        token['role'] = getattr(user, 'role', 'student')
+        token['id'] = user.id  
+        token['username'] = user.username
+        return token
 
-    def has_object_permission(self, request, view, obj):
-        if request.method in permissions.SAFE_METHODS:
-            return True
-        return obj.landlord == request.user
+class RegisterSerializer(serializers.ModelSerializer):
+    password = serializers.CharField(write_only=True)
 
-class PropertyViewSet(viewsets.ModelViewSet):
-    queryset = Property.objects.all().order_by('-created_at')
-    serializer_class = PropertySerializer
-    permission_classes = [IsLandlordOrReadOnly]
-    
-    def perform_create(self, serializer):
-        serializer.save(landlord=self.request.user)
+    class Meta:
+        model = User
+        fields = ['id', 'username', 'email', 'phone_number', 'password', 'role']
 
-    def get_queryset(self):
-        queryset = super().get_queryset()
-        max_distance = self.request.query_params.get('max_distance')
-        max_price = self.request.query_params.get('max_price')
-        
-        if max_distance:
-            queryset = queryset.filter(distance_from_campus_km__lte=float(max_distance))
-        if max_price:
-            queryset = queryset.filter(rooms__rent_price__lte=float(max_price)).distinct()
-        return queryset
+    def create(self, validated_data):
+        password = validated_data.pop('password')
+        user = User.objects.create(**validated_data)
+        user.set_password(password) 
+        user.save()
+        return user
 
-class RoomViewSet(viewsets.ModelViewSet):
-    queryset = Room.objects.all()
-    serializer_class = RoomSerializer
-    permission_classes = [IsLandlordOrReadOnly]
+# ----------------------------------------------------
+# 🏡 PROPERTY, MARKETPLACE, & HOUSING SERIALIZERS
+# ----------------------------------------------------
 
-    def create(self, request, *args, **kwargs):
-        serializer = self.get_serializer(data=request.data)
-        serializer.is_valid(raise_exception=True)
-        room = serializer.save()
+class RoomImageSerializer(serializers.ModelSerializer):
+    image_url = serializers.SerializerMethodField()
 
-        # 🔍 BULK MULTIPART INTERCEPTOR LOOP
-        # Iterates over each file stream attached to the 'image' form-data key
-        uploaded_files = request.FILES.getlist('image')
-        for file_asset in uploaded_files:
-            RoomImage.objects.create(room=room, image=file_asset)
-            print(f"📸 Saved image file asset: {file_asset.name}")
+    class Meta:
+        model = RoomImage
+        fields = ['id', 'room', 'image', 'image_url', 'uploaded_at']
 
-        headers = self.get_success_headers(serializer.data)
-        return Response(serializer.data, status=status.HTTP_201_CREATED, headers=headers)
+    def get_image_url(self, obj):
+        request = self.context.get('request')
+        if obj.image:
+            if request:
+                return request.build_absolute_uri(obj.image.url)
+            # Cloud/Railway deployment fallback prefix
+            return f"https://railway.app{obj.image.url}"
+        return None
 
-class ChatRoomViewSet(viewsets.ModelViewSet):
-    serializer_class = ChatRoomSerializer
-    permission_classes = [permissions.IsAuthenticated]
+class RoomSerializer(serializers.ModelSerializer):
+    images = RoomImageSerializer(many=True, read_only=True)
 
-    def get_queryset(self):
-        user = self.request.user
-        if getattr(user, 'role', None) == 'student':
-            return ChatRoom.objects.filter(student=user).order_by('-created_at')
-        return ChatRoom.objects.filter(landlord=user).order_by('-created_at')
+    class Meta:
+        model = Room
+        fields = ['id', 'property', 'room_number', 'rent_price', 'is_available', 'amenities', 'images']
 
-    @action(detail=True, methods=['get'])
-    def messages(self, request, pk=None):
-        try:
-            try:
-                room = ChatRoom.objects.get(id=int(pk))
-            except (ChatRoom.DoesNotExist, ValueError):
-                user = request.user
-                if getattr(user, 'role', None) == 'student':
-                    room = ChatRoom.objects.get(property_id=int(pk), student=user)
-                else:
-                    room = ChatRoom.objects.get(property_id=int(pk), landlord=user)
+class PropertySerializer(serializers.ModelSerializer):
+    landlord = serializers.PrimaryKeyRelatedField(read_only=True)
+    rooms = RoomSerializer(many=True, read_only=True)
 
-            messages = room.messages.all().order_by('timestamp')
-            serializer = MessageSerializer(messages, many=True)
-            return Response(serializer.data)
-        except Exception:
-            return Response([])
+    class Meta:
+        model = Property
+        fields = [
+            'id', 'landlord', 'title', 'description', 'address', 
+            'latitude', 'longitude', 'distance_from_campus_km', 'rooms', 'created_at'
+        ]
+
+# ----------------------------------------------------
+# 💬 REAL-TIME MESSAGING LOOP SERIALIZERS
+# ----------------------------------------------------
+
+class MessageSerializer(serializers.ModelSerializer):
+    sender = serializers.PrimaryKeyRelatedField(read_only=True)
+    sender_username = serializers.CharField(source='sender.username', read_only=True)
+
+    class Meta:
+        model = Message
+        fields = ['id', 'room', 'sender', 'sender_username', 'text', 'timestamp']
+
+class ChatRoomSerializer(serializers.ModelSerializer):
+    student_username = serializers.CharField(source='student.username', read_only=True)
+    landlord_username = serializers.CharField(source='landlord.username', read_only=True)
+    property_title = serializers.CharField(source='property.title', read_only=True)
+    latest_message = serializers.SerializerMethodField()
+
+    class Meta:
+        model = ChatRoom
+        fields = [
+            'id', 'student', 'student_username', 'landlord', 
+            'landlord_username', 'property', 'property_title', 
+            'latest_message', 'created_at'
+        ]
+
+    def get_latest_message(self, obj):
+        msg = obj.messages.all().order_by('-timestamp').first()
+        if msg:
+            return MessageSerializer(msg).data
+        return None
