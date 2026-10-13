@@ -33,6 +33,19 @@ class RegisterSerializer(serializers.ModelSerializer):
         user.save()
         return user
 
+
+# marketplace/serializers.py
+
+class BookingRequestSerializer(serializers.ModelSerializer):
+    student_username = serializers.CharField(source='student.username', read_only=True)
+    property_title = serializers.CharField(source='property.title', read_only=True)
+    landlord_id = serializers.IntegerField(source='property.landlord.id', read_only=True)
+
+    class Meta:
+        model = BookingRequest
+        fields = ['id', 'property', 'property_title', 'student', 'student_username', 'room_number', 'status', 'landlord_id', 'created_at']
+
+
 # ----------------------------------------------------
 # 🏡 PROPERTY, MARKETPLACE, & HOUSING SERIALIZERS
 # ----------------------------------------------------
