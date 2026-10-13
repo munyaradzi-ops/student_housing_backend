@@ -7,6 +7,7 @@ from .views import (
     RoomViewSet, 
     ChatRoomViewSet,
     RegisterView, 
+     BookingRequestViewSet,
     CustomTokenObtainPairView  # Matching your custom view declaration exactly
 )
 
