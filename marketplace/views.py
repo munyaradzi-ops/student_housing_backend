@@ -38,10 +38,9 @@ class RegisterView(generics.CreateAPIView):
         }, status=status.HTTP_201_CREATED)
 
 
+# marketplace/views.py
+
 class IsLandlordOrReadOnly(permissions.BasePermission):
-    """
-    Custom permission to only allow landlords to edit/create properties.
-    """
     def has_permission(self, request, view):
         if request.method in permissions.SAFE_METHODS:
             return True
@@ -50,7 +49,18 @@ class IsLandlordOrReadOnly(permissions.BasePermission):
     def has_object_permission(self, request, view, obj):
         if request.method in permissions.SAFE_METHODS:
             return True
-        return obj.landlord == request.user
+        
+        # 🔍 SMART RELATIONSHIP TRAVERSAL BINDING:
+        # Check if the targeted object has a direct landlord attribute (Property model)
+        if hasattr(obj, 'landlord'):
+            return obj.landlord == request.user
+            
+        # If it's a Room object instead, hop up through the property key link relationship!
+        if hasattr(obj, 'property') and hasattr(obj.property, 'landlord'):
+            return obj.property.landlord == request.user
+            
+        return False
+
 
 
 class PropertyViewSet(viewsets.ModelViewSet):
