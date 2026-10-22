@@ -146,6 +146,14 @@ class RoomViewSet(viewsets.ModelViewSet):
         headers = self.get_success_headers(serializer.data)
         return Response(serializer.data, status=status.HTTP_201_CREATED, headers=headers)
 
+
+        # 🔍 FORCE PARTIAL UPDATE COMPATIBILITY FOR ROOMS:
+    def partial_update(self, request, *args, **kwargs):
+        kwargs['partial'] = True
+        print(f"📥 [CLOUD EDIT] Processing Room PATCH update for ID {kwargs.get('pk')}:", request.data)
+        return super().update(request, *args, **kwargs)
+
+
     def get_queryset(self):
         queryset = super().get_queryset()
         max_price = self.request.query_params.get('max_price')
