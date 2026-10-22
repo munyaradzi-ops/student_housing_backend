@@ -61,6 +61,11 @@ class PropertyViewSet(viewsets.ModelViewSet):
     def perform_create(self, serializer):
         serializer.save(landlord=self.request.user)
 
+      # This explicitly ensures PATCH requests process smoothly without requiring ALL model fields
+    def partial_update(self, request, *args, **kwargs):
+        kwargs['partial'] = True
+        return super().update(request, *args, **kwargs)
+
     def get_queryset(self):
         queryset = super().get_queryset()
         max_distance = self.request.query_params.get('max_distance')
